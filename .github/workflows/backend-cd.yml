@@ -1,0 +1,98 @@
+name: Backend Continuous Deployment
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'backend/**'   # Only trigger when code in the backend folder changes 
+  workflow_dispatch:     
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Install necessary dependencies
+      run:  |
+        cd starter/backend
+        python -m pip install --upgrade pip
+        pip install pipenv
+        pip install flake8
+
+    - name: Run Lint
+      run: cd starter/backend && pipenv run lint
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup Python
+      uses:  actions/setup-python@v4
+      with:
+        python-version: "3.10"
+
+    - name: Install necessary dependencies
+      run:  |
+        cd starter/backend
+        python -m pip install --upgrade pip
+        pip install pipenv
+        pip install flake8
+
+    - name: Run Tests
+      run: cd starter/backend && pipenv install pytest && pipenv run test
+
+      
+  Build:
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Configure AWS Credentials
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+        
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Build and Push Docker Image to Amazon ECR
+      env:
+        IMAGE_TAG: latest
+        REPO_NAME: backend
+      run: |
+        cd starter/backend
+        docker build --build-arg=REACT_APP_MOVIE_API_URL=http://localhost:5000 --tag 351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG .
+        docker push 351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG
+
+    - name: Update Kubeconfig
+      run:
+       aws eks update-kubeconfig --name cluster --region us-east-1
+
+    - name: Deploy Docker Image to Amazon EKS
+      env:
+        IMAGE_TAG: latest
+        REPO_NAME: backend
+      run: |
+        cd starter/backend/k8s
+        aws eks update-kubeconfig --name cluster --region us-east-1
+        kustomize edit set image backend=351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG
+        kustomize build | kubectl apply -f -
+
