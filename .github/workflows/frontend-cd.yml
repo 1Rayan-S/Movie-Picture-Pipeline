@@ -76,6 +76,22 @@ jobs:
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
 
+    - name: Configure Kubeconfig
+      run: 
+       aws eks update-kubeconfig --name cluster --region us-east-1
+
+    - name: Get Backend Service URL
+      id: get_backend_url
+      run: |
+          cd starter/frontend/k8s
+          kubectl get svc -A
+          BACKEND_URL=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          if [ -z "$BACKEND_URL" ]; then
+            echo "Error: Backend service URL is not available"
+            exit 1
+          fi
+          echo "BACKEND_URL=${BACKEND_URL}"
+          echo "::set-output name=backend_url::${BACKEND_URL}"
 
 
     - name: Build and push Docker image to Amazon ECR
@@ -84,14 +100,9 @@ jobs:
         REPO_NAME: frontend
       run: |
         cd starter/frontend
-        docker build --build-arg=REACT_APP_MOVIE_API_URL=http://localhost:5000 --tag 351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG .
+        echo " BACKEND_URL=${{ steps.get_backend_url.outputs.backend_url }}"
+        docker build --build-arg=REACT_APP_MOVIE_API_URL=http://${{ steps.get_backend_url.outputs.backend_url }} --tag 351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG .
         docker push 351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG
-    
-
-    - name: Configure Kubeconfig
-      run:
-       aws eks update-kubeconfig --name cluster --region us-east-1
-
 
     - name: Deploy Docker Image to Amazon EKS
       env:
@@ -101,3 +112,9 @@ jobs:
           cd starter/frontend/k8s
           kustomize edit set image frontend=351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG
           kustomize build | kubectl apply -f -
+
+    - name: Display backend service URL          
+      run: |
+        cd starter/frontend/k8s
+        SERVICE_URL=$(kubectl get svc frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        echo "Service URL: $SERVICE_URL"

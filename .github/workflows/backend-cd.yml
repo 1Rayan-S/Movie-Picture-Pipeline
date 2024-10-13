@@ -96,3 +96,11 @@ jobs:
         kustomize edit set image backend=351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG
         kustomize build | kubectl apply -f -
 
+
+    - name: Display backend service URL     
+      run: |
+        cd starter/backend/k8s
+        SERVICE_URL=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+        echo "Service URL: $SERVICE_URL"
+        
+
