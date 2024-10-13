@@ -113,8 +113,10 @@ jobs:
           kustomize edit set image frontend=351604726464.dkr.ecr.us-east-1.amazonaws.com/$REPO_NAME:$IMAGE_TAG
           kustomize build | kubectl apply -f -
 
-    - name: Display backend service URL          
+    - name: Display frontend service URL          
       run: |
         cd starter/frontend/k8s
+        echo "Waiting for frontend service external IP..."
+        kubectl wait --for=condition=available --timeout=300s service/frontend
         SERVICE_URL=$(kubectl get svc frontend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
         echo "Service URL: $SERVICE_URL"

@@ -100,7 +100,10 @@ jobs:
     - name: Display backend service URL     
       run: |
         cd starter/backend/k8s
+        echo "Waiting for backend service external IP..."
+        kubectl wait --for=condition=available --timeout=300s service/backend
         SERVICE_URL=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-        echo "Service URL: $SERVICE_URL"
+        echo "Backend Service URL: $SERVICE_URL"
+        
         
 
