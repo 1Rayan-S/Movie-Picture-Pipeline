@@ -97,13 +97,24 @@ jobs:
         kustomize build | kubectl apply -f -
 
 
-    - name: Display backend service URL     
+    - name: Display backend service URL
       run: |
         cd starter/backend/k8s
         echo "Waiting for backend service external IP..."
-        kubectl wait --for=condition=available --timeout=300s service/backend
-        SERVICE_URL=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-        echo "Backend Service URL: $SERVICE_URL"
+        for i in {1..30}; do
+          SERVICE_URL=$(kubectl get svc backend -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          if [ -n "$SERVICE_URL" ]; then
+            echo "Backend Service URL: $SERVICE_URL"
+            break
+          fi
+          echo "Waiting for service to get an external IP..."
+          sleep 10
+        done
+
+        if [ -z "$SERVICE_URL" ]; then
+          echo "Error: Timed out waiting for service to get an external IP"
+          exit 1
+        fi
         
         
 
